@@ -17,6 +17,7 @@ class exp_parameters:
     e: float
     f: float
     cut: float
+    temperature: float = 1.
 
     def error(self, other) -> float:
         diffs = [self.b / self.a - other.b / other.a, self.c - other.c, self.d - other.d, self.e - other.e, self.f - other.f, self.cut - other.cut]
@@ -37,9 +38,9 @@ INITIAL_GUESS = exp_parameters(
     b=-.928805,
     c=0.244161,
     d=0.386036,
-    e=238.584745,
-    f=-0.839385,
-    cut=0.004160,
+    e=1.,
+    f=0.01,
+    cut=0.2,
 )
 
 
@@ -53,15 +54,18 @@ class exp_function(nn.Module):
         self.e = nn.parameter.Parameter(torch.tensor(parameters.e))
         self.f = nn.parameter.Parameter(torch.tensor(parameters.f), requires_grad=False)
         self.cut = nn.parameter.Parameter(torch.tensor(parameters.cut))
+        self.temperature = nn.parameter.Parameter(torch.tensor(parameters.temperature))
 
     def forward(self, t):
         # self.d = nn.parameter.Parameter(1. - self.c * torch.log10(self.a + self.b), requires_grad=False)
+        if self.training:
+            interp = torch.sigmoid((t - (self.e * self.cut + self.f)) / self.temperature)
+        else:
+            interp = (t > (self.e * self.cut + self.f)).float()
         self.f = nn.parameter.Parameter(self.cut - (self.e * (torch.pow(10., (self.cut - self.d) / self.c) - self.b) / self.a), requires_grad=False)
-
-        mask = (t > (self.e * self.cut + self.f))
         pow_value = (torch.pow(10., (t - self.d) / self.c) - self.b) / self.a
         lin_value = (t - self.f) / self.e
-        output = mask * pow_value + (~mask) * lin_value
+        output = interp * pow_value + (1 - interp) * lin_value
         return output
 
     def get_log_parameters(self) -> exp_parameters:
@@ -73,6 +77,7 @@ class exp_function(nn.Module):
             e = float(self.e),
             f = float(self.f),
             cut = float(self.cut),
+            temperature = float(self.temperature)
         )
 
 
@@ -89,8 +94,11 @@ def derive_exp_function_gd(lut: lut_1d_properties, epochs: int = 100) -> exp_par
     model = exp_function(INITIAL_GUESS)
     dl = data.DataLoader(dataset_from_1d_lut(lut), batch_size=lut.size)
     loss_fn = nn.L1Loss(reduction='mean')
-    optim = torch.optim.SGD(model.parameters(), lr=1e-4)
-    eps = 1e-8
+    optim = torch.optim.Adam(model.parameters(), lr=1e-3)
+    sched = torch.optim.lr_scheduler.MultiplicativeLR(optim, lambda x: 0.5 ** (x // 1500))
+    errors = []
+    losses = []
+    model.train()
     with tqdm(total=epochs) as bar:
         for e in range(epochs):
             for x, y in dl:
@@ -101,10 +109,21 @@ def derive_exp_function_gd(lut: lut_1d_properties, epochs: int = 100) -> exp_par
                 error = loss_fn(y, y_pred).detach()
                 loss.backward()
                 optim.step()
+            # sched.step()
 
             if e % 10 == 0:
                 bar.update(10)
-                bar.set_postfix(loss=float(loss), error=float(error), param_error=model.get_log_parameters().error(REFERENCE_ARRI_LOG_PARAMETERS))
+                bar.set_postfix(loss=float(loss), error=float(error), param_error=model.get_log_parameters().error(REFERENCE_ARRI_LOG_PARAMETERS), lr=sched.get_last_lr())
+                errors.append(float(error))
+                losses.append(float(loss))
+
+
+    plt.figure()
+    plt.xlim(0, epochs)
+    plt.ylim(min(errors[-1], losses[-1]), max(errors[0], losses[0]))
+    plt.plot(range(0, epochs, 10), errors)
+    plt.plot(range(0, epochs, 10), losses)
+    plt.show()
 
     return model.get_log_parameters()
 
@@ -114,16 +133,21 @@ def plot_data(x, y):
     plt.plot(x, y)
 
 if __name__ == "__main__":
-    lut = read_1d_lut('zlog2_to_linear_4096.cube')
-    params = derive_exp_function_gd(lut, epochs=10000)
+    lut = read_1d_lut('ARRI_logc2linear_EI800.cube')
+    params = derive_exp_function_gd(lut, epochs=4000)
     print(params)
 
     ds = dataset_from_1d_lut(lut)
     x, y = ds.tensors
-    y_pred = exp_function(params)(x).detach().numpy()
+    model = exp_function(params)
+    model.eval()
+    y_pred = model(x).detach().numpy()
+    model.train()
+    y_pred_interp = model(x).detach().numpy()
     plt.figure()
     plot_data(x, y)
     plot_data(x, y_pred)
+    plot_data(x, y_pred_interp)
     plt.show()
 
 
