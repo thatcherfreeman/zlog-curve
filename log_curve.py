@@ -43,16 +43,27 @@ INITIAL_GUESS = exp_parameters(
     cut=0.2,
 )
 
+ZLOG_PARAMS = exp_parameters(
+    a=249.77914428710938,
+    b=0.9484496712684631,
+    c=0.3455176055431366,
+    d=0.1709400862455368,
+    e=1.3393715620040894,
+    f=-0.06127290427684784,
+    cut=-0.0652475655078888,
+    temperature=0.052583832293748856,
+)
+
 
 class exp_function(nn.Module):
     def __init__(self, parameters: exp_parameters):
         super(exp_function, self).__init__()
-        self.a = nn.parameter.Parameter(torch.tensor(parameters.a), requires_grad=False)
+        self.a = nn.parameter.Parameter(torch.tensor(parameters.a))
         self.b = nn.parameter.Parameter(torch.tensor(parameters.b))
         self.c = nn.parameter.Parameter(torch.tensor(parameters.c))
         self.d = nn.parameter.Parameter(torch.tensor(parameters.d))
         self.e = nn.parameter.Parameter(torch.tensor(parameters.e))
-        self.f = nn.parameter.Parameter(torch.tensor(parameters.f), requires_grad=False)
+        self.f = nn.parameter.Parameter(torch.tensor(parameters.f))
         self.cut = nn.parameter.Parameter(torch.tensor(parameters.cut))
         self.temperature = nn.parameter.Parameter(torch.tensor(parameters.temperature))
 
@@ -80,6 +91,45 @@ class exp_function(nn.Module):
             temperature = float(self.temperature)
         )
 
+class log_function(nn.Module):
+    def __init__(self, parameters: exp_parameters):
+        super(log_function, self).__init__()
+        self.a = nn.parameter.Parameter(torch.tensor(parameters.a))
+        self.b = nn.parameter.Parameter(torch.tensor(parameters.b))
+        self.c = nn.parameter.Parameter(torch.tensor(parameters.c))
+        self.d = nn.parameter.Parameter(torch.tensor(parameters.d))
+        self.e = nn.parameter.Parameter(torch.tensor(parameters.e))
+        self.f = nn.parameter.Parameter(torch.tensor(parameters.f))
+        self.cut = nn.parameter.Parameter(torch.tensor(parameters.cut))
+        self.temperature = nn.parameter.Parameter(torch.tensor(parameters.temperature))
+
+    def forward(self, x):
+        if self.training:
+            interp = torch.sigmoid((x - self.cut) / self.temperature)
+        else:
+            interp = (x > self.cut)
+        self.f = nn.parameter.Parameter(self.cut - (self.e * (torch.pow(10., (self.cut - self.d) / self.c) - self.b) / self.a), requires_grad=False)
+        log_value = self.c * torch.log10(self.a * x + self.b) + self.d
+        lin_value = self.e * x + self.f
+        output = torch.zeros_like(x)
+        if self.training:
+            output = interp * log_value + (1 - interp) * lin_value
+        else:
+            output[interp] = log_value[interp]
+            output[~interp] = lin_value[~interp]
+        return output
+
+    def get_log_parameters(self) -> exp_parameters:
+        return exp_parameters(
+            a = float(self.a),
+            b = float(self.b),
+            c = float(self.c),
+            d = float(self.d),
+            e = float(self.e),
+            f = float(self.f),
+            cut = float(self.cut),
+            temperature = float(self.temperature)
+        )
 
 def dataset_from_1d_lut(lut: lut_1d_properties) -> data.dataset:
     x = torch.arange(0, lut.size, dtype=torch.float) * \
@@ -95,7 +145,7 @@ def derive_exp_function_gd(lut: lut_1d_properties, epochs: int = 100) -> exp_par
     dl = data.DataLoader(dataset_from_1d_lut(lut), batch_size=lut.size)
     loss_fn = nn.L1Loss(reduction='mean')
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)
-    sched = torch.optim.lr_scheduler.MultiplicativeLR(optim, lambda x: 0.5 ** (x // 1500))
+    sched = torch.optim.lr_scheduler.MultiplicativeLR(optim, lambda x: (0.5 if x % 3000 == 0 else 1.0))
     errors = []
     losses = []
     model.train()
@@ -109,11 +159,11 @@ def derive_exp_function_gd(lut: lut_1d_properties, epochs: int = 100) -> exp_par
                 error = loss_fn(y, y_pred).detach()
                 loss.backward()
                 optim.step()
-            # sched.step()
+                sched.step()
 
             if e % 10 == 0:
                 bar.update(10)
-                bar.set_postfix(loss=float(loss), error=float(error), param_error=model.get_log_parameters().error(REFERENCE_ARRI_LOG_PARAMETERS), lr=sched.get_last_lr())
+                bar.set_postfix(loss=float(loss), error=float(error), temperature=float(model.get_log_parameters().temperature), lr=sched.get_last_lr())
                 errors.append(float(error))
                 losses.append(float(loss))
 
@@ -133,8 +183,11 @@ def plot_data(x, y):
     plt.plot(x, y)
 
 if __name__ == "__main__":
-    lut = read_1d_lut('ARRI_logc2linear_EI800.cube')
-    params = derive_exp_function_gd(lut, epochs=4000)
+    epochs = 25000
+    fn = 'zlog2_to_linear_4096.cube'
+
+    lut = read_1d_lut(fn)
+    params = derive_exp_function_gd(lut, epochs=epochs)
     print(params)
 
     ds = dataset_from_1d_lut(lut)
@@ -148,6 +201,14 @@ if __name__ == "__main__":
     plot_data(x, y)
     plot_data(x, y_pred)
     plot_data(x, y_pred_interp)
+    plt.show()
+
+    log_model = log_function(model.get_log_parameters())
+    log_model.eval()
+    x_restored = log_model(y).detach().numpy()
+    plt.figure()
+    plot_data(x, x)
+    plot_data(x, x_restored)
     plt.show()
 
 
