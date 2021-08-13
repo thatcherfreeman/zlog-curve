@@ -187,12 +187,12 @@ if __name__ == "__main__":
     fn = 'zlog2_to_linear_4096.cube'
 
     lut = read_1d_lut(fn)
-    params = derive_exp_function_gd(lut, epochs=epochs)
-    print(params)
+    # params = derive_exp_function_gd(lut, epochs=epochs)
+    # print(params)
 
     ds = dataset_from_1d_lut(lut)
     x, y = ds.tensors
-    model = exp_function(params)
+    model = exp_function(ZLOG_PARAMS)
     model.eval()
     y_pred = model(x).detach().numpy()
     model.train()
