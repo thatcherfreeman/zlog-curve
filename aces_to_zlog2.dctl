@@ -21,8 +21,8 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
 {
 
     float r2 = ( 1.71094569f * p_R) + (-0.45269318f * p_G) + (-0.17229756f * p_B);
-	float g2 = (-0.02106091f * p_R) + ( 1.02314636f * p_G) + ( 0.07333446f * p_B);
-	float b2 = (-0.09620104f * p_R) + ( 0.24508222f * p_G) + ( 0.90271589f * p_B);
+    float g2 = (-0.02106091f * p_R) + ( 1.02314636f * p_G) + ( 0.07333446f * p_B);
+    float b2 = (-0.09620104f * p_R) + ( 0.24508222f * p_G) + ( 0.90271589f * p_B);
 
     // Default is 8.0f
     const float gain = 8.0f;
@@ -35,6 +35,6 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
     g2 = linear_to_zlog(g);
     b2 = linear_to_zlog(b);
 
-	float3 res = to_float3(r2, g2, b2);
+    float3 res = to_float3(r2, g2, b2);
     return res;
 }
