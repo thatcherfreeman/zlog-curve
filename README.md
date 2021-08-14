@@ -38,6 +38,7 @@ Ultimately, the objective is to derive the `linear2log` conversion, but this is 
 
 ## Optimization
 The ground truth `log2linear` function is evaluated in the 1D LUT at $N$ points $X = \{(x_1, y_1), ..., (x_N, y_N)\}$. Our model at iteration $t$ can be described as $f(x, \theta_t)$, and we use the loss function:
+
 $$\ell(\theta_t; X) = \frac{1}{N} \sum_{i = 1}^N \left\lvert ~\log (f(x_i, \theta_t) + 0.5) - \log(y_i + 0.5) \right\rvert$$
 
 Additionally, to find the value of the parameter $\text{cut}$, instead of discretely thresholding when $x > \text{cut}$, I instead use a Sigmoid function with temperature to interpolate from the linear function to the power function. Given a temperature $T$ and $\text{cut}$, we can choose the weight of the power function according to $\sigma((x - \text{cut}) / T)$, allowing both $\text{cut}$ and $T$ to be learnable parameters. If $T$ is small, then we have done a good job of learning the threshold in the piecewise `log2linear` function. The Adam optimizer converged faster than SGD in my tests.
