@@ -1,0 +1,37 @@
+/**
+ * Scene linear to zlog2 gamma curve correction.
+ * Accurate to 10-bits or so.
+ */
+__DEVICE__ inline float linear_to_zlog(float x)
+{
+    const float a = 249.77914428710938f;
+    const float b = 0.9484496712684631f;
+    const float c = 0.3455176055431366f;
+    const float d = 0.1709400862455368f;
+    const float e = 1.3393715620040894f;
+    const float f = -0.06127290427684784f;
+    const float cut = -0.0652475655078888f;
+
+    if (x > cut) {
+        return (c * _log10f(a * x + b) + d);
+    } else {
+        return (e * x + f);
+    }
+}
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    // Default is 8.0f
+    const float gain = 3.0f;
+
+    float r = p_R / (gain * 3.7f);
+    float g = p_G / (gain * 3.7f);
+    float b = p_B / (gain * 3.7f);
+
+    float r2 = linear_to_zlog(r);
+    float g2 = linear_to_zlog(g);
+    float b2 = linear_to_zlog(b);
+
+    float3 res = to_float3(r2, g2, b2);
+    return res;
+}
