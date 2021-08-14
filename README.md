@@ -12,7 +12,26 @@ python log_curve.py --lut_file <path to LUT>
 ```
 This will compute the parameters of the log to linear conversion function in about 10 - 15 minutes, depending on your computer's speed.
 
-## About
+
+## Installing the DCTLs in DaVinci Resolve
+Go to the `dctl` folder and download the Aces/Zlog conversion DCTLs. On Windows and MacOS, they go in the `IDT` and `ODT` folders located in the following directories:
+```
+(Windows)
+%AppData%\Blackmagic Design\DaVinci Resolve\Support\ACES Transforms\
+
+(MacOS)
+~/Library/Application Support/Blackmagic Design/DaVinci Resolve/ACES Transformations/
+```
+
+For example, place the aces_to_zlog2.dctl file in the following folder on MacOS:
+```
+/Users/<your username>/Library/Application Support/Blackmagic Design/DaVinci Resolve/ACES Transformations/ODT/
+```
+Once you've done that, restart Resolve and they should show up in the ACES Transform node and in the color mangement settings.
+
+The zlog2 to Linear conversion DCTLs should go in Resolve's normal LUTs folder
+
+# Technical Details
 Some camera manufacturers do not release the Log to Scene Linear transfer function for their log curves. However, they sometimes provide it in the form of a 1D LUT. The general form of a log to linear conversion is the following function:
 
 ```python
