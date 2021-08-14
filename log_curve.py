@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from tqdm import tqdm
 
 from matplotlib import pyplot as plt
-
+import argparse
+import sys
 
 @dataclass
 class exp_parameters:
@@ -139,12 +140,12 @@ def dataset_from_1d_lut(lut: lut_1d_properties) -> data.dataset:
     y = torch.tensor(lut.contents[:, 0], dtype=torch.float)
     return data.TensorDataset(x, y)
 
-def derive_exp_function_gd(lut: lut_1d_properties, epochs: int = 100) -> exp_parameters:
+def derive_exp_function_gd(lut: lut_1d_properties, epochs: int = 100, lr=1e-3, use_scheduler=True) -> exp_parameters:
     # torch.autograd.set_detect_anomaly(True)
     model = exp_function(INITIAL_GUESS)
     dl = data.DataLoader(dataset_from_1d_lut(lut), batch_size=lut.size)
     loss_fn = nn.L1Loss(reduction='mean')
-    optim = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optim = torch.optim.Adam(model.parameters(), lr=lr)
     sched = torch.optim.lr_scheduler.MultiplicativeLR(optim, lambda x: (0.5 if x % 3000 == 0 else 1.0))
     errors = []
     losses = []
@@ -155,10 +156,10 @@ def derive_exp_function_gd(lut: lut_1d_properties, epochs: int = 100) -> exp_par
                 optim.zero_grad()
                 y_pred = model(x)
                 loss = loss_fn(torch.log(y_pred + 0.5), torch.log(y + 0.5))
-                # loss = loss_fn(y_pred, y)
                 error = loss_fn(y, y_pred).detach()
                 loss.backward()
                 optim.step()
+            if use_scheduler:
                 sched.step()
 
             if e % 10 == 0:
@@ -182,17 +183,56 @@ def plot_data(x, y):
     plt.ylim(0, 1)
     plt.plot(x, y)
 
+
 if __name__ == "__main__":
-    epochs = 25000
-    fn = 'zlog2_to_linear_4096.cube'
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--num_epochs',
+        default=25000,
+        required=False,
+        type=int,
+        help='number of epochs to train for.',
+    )
+    parser.add_argument(
+        '--lut_file',
+        default=None,
+        help='Specify the 1D file to load from.',
+    )
+    parser.add_argument(
+        '--learning_rate',
+        default=1e-3,
+        type=float,
+        help='Specify the gradient descent learning rate.',
+        required=False,
+    )
+    parser.add_argument(
+        '--no_lrscheduler',
+        action='store_false',
+        help='Add flag to avoid learning rate scheduler. Do this if the step size goes to zero before convergeance.',
+        required=False,
+    )
+    args = parser.parse_args()
+    print(args)
+    epochs = args.num_epochs
+    fn = args.lut_file
+    if args.lut_file == None:
+        parser.print_help()
+        sys.exit()
 
+    # Train model
     lut = read_1d_lut(fn)
-    # params = derive_exp_function_gd(lut, epochs=epochs)
-    # print(params)
+    params = derive_exp_function_gd(
+        lut,
+        epochs=epochs,
+        lr=args.learning_rate,
+        use_scheduler=(not args.no_lrscheduler),
+    )
+    print(params)
 
+    # Display log2lin model's output curve vs original LUT
     ds = dataset_from_1d_lut(lut)
     x, y = ds.tensors
-    model = exp_function(ZLOG_PARAMS)
+    model = exp_function(params)
     model.eval()
     y_pred = model(x).detach().numpy()
     model.train()
@@ -203,6 +243,7 @@ if __name__ == "__main__":
     plot_data(x, y_pred_interp)
     plt.show()
 
+    # Apply lin2log curve to LUT, expect straight line.
     log_model = log_function(model.get_log_parameters())
     log_model.eval()
     x_restored = log_model(y).detach().numpy()
