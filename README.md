@@ -17,7 +17,7 @@ This will compute the parameters of the log to linear conversion function in abo
 Go to the `dctl` folder and download the Aces/Zlog conversion DCTLs. On Windows and MacOS, they go in the `IDT` and `ODT` folders located in the following directories:
 ```
 (Windows)
-%AppData%\Blackmagic Design\DaVinci Resolve\Support\ACES Transforms\
+%AppData%\Roaming\Blackmagic Design\DaVinci Resolve\Support\ACES Transforms\
 
 (MacOS)
 ~/Library/Application Support/Blackmagic Design/DaVinci Resolve/ACES Transformations/
@@ -26,6 +26,10 @@ Go to the `dctl` folder and download the Aces/Zlog conversion DCTLs. On Windows 
 For example, place the aces_to_zlog2.dctl file in the following folder on MacOS:
 ```
 /Users/<your username>/Library/Application Support/Blackmagic Design/DaVinci Resolve/ACES Transformations/ODT/
+```
+or on Windows:
+```
+C:\Users\<your username>\AppData\Roaming\Blackmagic Design\DaVinci Resolve\Support\ACES Transforms\ODT\
 ```
 Once you've done that, restart Resolve and they should show up in the ACES Transform node and in the color mangement settings.
 
